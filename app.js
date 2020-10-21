@@ -1,70 +1,105 @@
-const fetchData = async (searchTerm) => {
- let params = {
-  apikey: "47ffe9c2",
-  s: searchTerm
- }
-
- const response = await fetch(`http://www.omdbapi.com/?apikey=${params.apikey}&s=${params.s}`);
- const data = await response.json();
-
- if(data.Error){
-  return [];
- }
-
- return data.Search
+const createRootElementConfig = {
+  renderOption(movie) {
+    const imgSRC = movie.Poster === "N/A" ? "" : movie.Poster;
+    return `
+    <img src="${imgSRC}" alt="movie poster" />
+    <small>${movie.Title}</small> (${movie.Year})
+   `
+  },
+  inputValue(movie){
+    return movie.Title;
+  },
+  async fetchData(searchTerm) {
+    let params = {
+     apikey: "47ffe9c2",
+     s: searchTerm
+    }
+   
+    const response = await fetch(`http://www.omdbapi.com/?apikey=${params.apikey}&s=${params.s}`);
+    const data = await response.json();
+   
+    if(data.Error){
+     return [];
+    }
+   
+    return data.Search
+   }
 }
 
-const wrapper = document.querySelector(".wrapper");
-wrapper.innerHTML = `
-<div class="dropdown">
-  <input type="text" placeholder="Search for a movie">
-  <div class="dropdown-content hidden">
-  </div>
-</div>
-`
+createRootElement({
+  ...createRootElementConfig,
+  root: document.querySelector(".root-left"),
+  onOptionSelect(movie){
+    onMovieSelect(movie, document.querySelector(".summary-left"), "left")
+  },
+})
+createRootElement({
+  ...createRootElementConfig,
+  root: document.querySelector(".root-right"),
+  onOptionSelect(movie){
+    onMovieSelect(movie,  document.querySelector(".summary-right"), "right")
+  },
+})
 
-const input = document.querySelector("input");
-const dropdown = document.querySelector(".dropdown");
-const dropdownContent = document.querySelector(".dropdown-content");
-
-const onInput = async (e) => {
- const movies = await fetchData(e.target.value);
- dropdownContent.innerHTML = "";
-
- dropdownContent.classList.remove("hidden");
-
- for (let movie of movies){
-
-  const a = document.createElement("a");
-  const imgSRC = movie.Poster === "N/A" ? "" : movie.Poster;
-
-  a.innerHTML = `
-   <img src="${imgSRC}" alt="movie poster" />
-   <small>${movie.Title}</small>
-  `;
-
-  a.addEventListener("click", (e) => {
-    input.value = movie.Title;
-    onMovieSelect(movie);
-  })
-
-  dropdownContent.appendChild(a);
- }
-}
-
-input.addEventListener("input", debounce(onInput, 500));
-
-const onMovieSelect = async (movie) => {
+let leftMovie;
+let rightMovie;
+const onMovieSelect = async (movie, summaryTarget, side) => {
   let params = {
     apikey: "47ffe9c2",
     i: movie.imdbID
    }
   const response = await fetch(`http://www.omdbapi.com/?apikey=${params.apikey}&i=${params.i}`);
   const data = await response.json();
-  document.querySelector("#test").innerHTML =  movieTemplate(data);
+
+  summaryTarget.innerHTML =  movieTemplate(data);
+
+  if(side === "left"){
+    leftMovie = data;
+  } else {
+    rightMovie = data;
+  }
+
+  if(leftMovie && rightMovie){
+    runComparison();
+  }
+}
+
+const runComparison = () => {
+ const leftSideStats = document.querySelectorAll(".summary-left .stats-container");
+ const rightSideStats = document.querySelectorAll(".summary-right .stats-container");
+
+ leftSideStats.forEach((leftStat, index) => {
+  const rightStat = rightSideStats[index];
+
+  const leftSideValue = parseInt(leftStat.dataset.value);
+  const rightSideValue = parseInt(rightStat.dataset.value);
+
+  if(rightSideValue > leftSideValue){
+    leftStat.classList.add("warning");
+  } else {
+    rightStat.classList.add("warning");
+  }
+ })
 }
 
 const movieTemplate = (movieDetails) => {
+  const dollars = () => {
+    if (movieDetails.BoxOffice = "N/A") {
+      return movieDetails.BoxOffice;
+    }
+    return parseInt(movieDetails.BoxOffice.replace(/\$/g, "").replace(/,/g, ""));
+  };
+
+  const metaScore = parseInt(movieDetails.Metascore);
+
+  const rating = parseFloat(movieDetails.imdbRating.replace(/,/g, ""))
+
+  const votes = parseInt(movieDetails.imdbVotes.replace(/,/g, ""))
+
+  const awards = movieDetails.Awards.split(' ').reduce((acc, word) => (!isNaN(parseInt(word)) ? acc += parseInt(word) : acc), 0)
+
+  console.log(awards)
+
   return `
   <div class="movie-detail">
     <img src="${movieDetails.Poster}" alt="movie poster" />
@@ -75,22 +110,27 @@ const movieTemplate = (movieDetails) => {
     </div>
   </div>
 
-    <div class="stats-container">
+    <div data-value="${awards}" class="stats-container">
       <p>${movieDetails.Awards}</p>
       <small>Awards</small>
     </div>
 
-    <div class="stats-container">
+    <div data-value="${dollars}" class="stats-container">
+    <p>${movieDetails.BoxOffice}</p>
+    <small>Box Office</small>
+  </div>
+
+    <div data-value="${metaScore}" class="stats-container">
       <p>${movieDetails.Metascore}</p>
       <small>Metascore</small>
     </div>
 
-    <div class="stats-container">
+    <div data-value="${rating}" class="stats-container">
       <p>${movieDetails.imdbRating}</p>
       <small>IMDB Rating</small>
     </div>
 
-    <div class="stats-container">
+    <div data-value="${votes}" class="stats-container">
       <p>${movieDetails.imdbVotes}</p>
       <small>IMDB Votes</small>
     </div>
